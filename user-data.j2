@@ -1,0 +1,31 @@
+#cloud-config
+# key with your actual public key
+ 
+# Hostname management
+preserve_hostname: False
+hostname: {{ vm_name }}
+fqdn: {{ vm_name }}
+ 
+# Setup Users with ssh keys so that I can log in into new machine
+users:
+    - default
+    - name: {{ default_user }}
+      groups: ['wheel']
+      shell: /bin/bash
+      sudo: ALL=(ALL) NOPASSWD:ALL
+      ssh_pwauth: True
+     
+
+network:
+  version: 2
+  ethernets:
+    virbr0:
+      dhcp4: true        
+
+chpasswd:
+  list: |
+    root:{{ root_password }}
+    {{ default_user }}:{{ default_password }}
+  expire: False
+
+

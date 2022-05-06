@@ -1,0 +1,78 @@
+---
+- name:
+  hosts: all
+  become: yes
+  vars:
+    vm_location: /var/lib/libvirt/images
+    vm_name: centos7
+    default_user: thijs
+    default_password: toor
+    root_password: toor
+    timezone: Europe/Amsterdam
+    centos_qcow2_url: https://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud.qcow2
+    disk_size: 9
+    vcpu: 1
+    memory: 1024
+  remote_user: thijs
+  tasks:
+    - name: Download centos qcow2
+      get_url:
+        url: https://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud.qcow2
+        dest: /var/lib/libvirt/boot/CentOS-7-x86_64-GenericCloud.qcow2
+
+    - name: Create VM Folder
+      file:
+        path: "{{ vm_location }}/{{ vm_name }}"
+        state: directory
+
+    - name: Create meta-data file
+      template:
+        src: meta-data.j2
+        dest: "{{ vm_location }}/{{ vm_name }}/meta-data"
+
+    - name: Create user-data file
+      template:
+        src: user-data.j2
+        dest: "{{ vm_location }}/{{ vm_name }}/user-data"
+
+    - name: Copy qcow2 to vm location
+      copy:
+        src: /var/lib/libvirt/boot/CentOS-7-x86_64-GenericCloud.qcow2
+        dest: "{{ vm_location }}/{{ vm_name }}/{{ vm_name }}.qcow2"
+        remote_src: yes
+
+    - name: make cloud-init ISO file 
+      command: mkisofs -o {{ vm_name }}-cidata.iso -V cidata -J -r user-data meta-data
+      args:
+        chdir: "{{ vm_location }}/{{ vm_name }}"
+
+    - name: Create VM
+      command: | 
+        virt-install --import --name {{ vm_name }}
+        --memory {{ memory }} --vcpus {{ vcpu }} --cpu host 
+        --disk {{ vm_name }}.qcow2,format=qcow2,bus=virtio 
+        --disk {{ vm_name }}-cidata.iso,device=cdrom 
+ 
+        --os-type=linux 
+        --os-variant=centos7.0
+        --graphics spice 
+        --noautoconsole
+      args:
+        chdir: "{{ vm_location }}/{{ vm_name }}" 
+      tags:
+        - create
+        
+    - name: add vm to hostfile
+      delegate_to: localhost
+      become: yes
+      lineinfile:
+        path: /etc/ansible/hosts
+        insertafter: '\[kvm-guest\]'
+        line: '192.168.108.143'
+        state: present
+
+    - name: Wait for VM
+      pause:
+        seconds: 5
+        
+
